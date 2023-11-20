@@ -1,0 +1,5 @@
+num_workers: 4
+batch_size: 32
+img_size: 64
+data_type: EXPR_Set
+dataset_dir: /home/user2/dataset/face/RAF-DB
