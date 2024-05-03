@@ -1,7 +1,5 @@
 # LatentFace
 
-We propose a novel unsupervised disentangling framework for facial expression and identity representations. We suggest that the disentangling should be performed in latent space and propose a novel 3D-ware latent diffusion model. Please refer to [our paper](https://arxiv.org/abs/2309.08273) for more details.
-
 ## Environment
 
 You can further use the following commands to install extra packages for training, or follow [the official tutorial](https://github.com/facebookresearch/pytorch3d/blob/main/INSTALL.md) to install Pytorch3D.
@@ -29,19 +27,4 @@ You can train the model with the following command.
 
 ```bash 
 python run_diffusion.py --config configs.yml
-```
-
-## Citation
-
-If you find this work useful, please cite our paper with the following bibtex:
-
-```bibtex
-@misc{he2023unsupervised,
-      title={Unsupervised Disentangling of Facial Representations with 3D-aware Latent Diffusion Models}, 
-      author={Ruian He and Zhen Xing and Weimin Tan and Bo Yan},
-      year={2023},
-      eprint={2309.08273},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV}
-}
 ```

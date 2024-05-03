@@ -42,7 +42,7 @@ def is_image_file(filename):
 
 
 ## simple image dataset ##
-def make_dataset(dir):
+def make_dataset(dir, batchsize=16):
     assert os.path.isdir(dir), '%s is not a valid directory' % dir
 
     images = {}
@@ -54,9 +54,9 @@ def make_dataset(dir):
                 else:
                     images[root]=[fname]
 
-    # for key in list(images.keys()):
-    #     if len(images[key])<8:
-    #         del images[key]
+    for key in list(images.keys()):
+        if len(images[key])<batchsize:
+            del images[key]
     return images
 
 class ImageDataset(torch.utils.data.Dataset):
@@ -68,7 +68,7 @@ class ImageDataset(torch.utils.data.Dataset):
                  batch_size=16):
         super(ImageDataset, self).__init__()
         self.root = data_dir
-        self.paths = make_dataset(data_dir)
+        self.paths = make_dataset(data_dir, batch_size)
         self.size = len(self.paths)
         self.image_size = image_size
         self.crop = crop
@@ -91,8 +91,8 @@ class ImageDataset(torch.utils.data.Dataset):
         fnames = list(self.paths.values())[index % self.size]
         froot = list(self.paths.keys())[index % self.size]
 
-        # select_names = np.random.choice(fnames,self.batch_size)
-        select_names = fnames
+        select_names = np.random.choice(fnames,self.batch_size)
+        # select_names = fnames
         select_imgs = []
         for name in select_names:
             fpath = os.path.join(froot,name)
