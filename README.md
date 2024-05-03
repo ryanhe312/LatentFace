@@ -1,7 +1,5 @@
 # LatentFace
 
-We propose a novel unsupervised disentangling framework for facial expression and identity representations. We suggest that the disentangling should be performed in latent space and propose a novel 3D-ware latent diffusion model. Please refer to [our paper](https://arxiv.org/abs/2309.08273) for more details.
-
 ## Environment
 
 We build the environment with conda on Ubuntu 20.04.1. You can use the following command to build the environment.
@@ -16,7 +14,7 @@ pip install opencv-python tqdm tensorboard PyYAML
 ## Datasets
 
 Please download the dataset from  
-[AffectNet](http://mohammadmahoor.com/affectnet/), [RAF-DB](http://www.whdeng.cn/RAF/model1.html), [Aff-wild2](https://ibug.doc.ic.ac.uk/resources/iccv-2021-2nd-abaw/), and [LFW/SLLFW](http://www.whdeng.cn/SLLFW/). Check your dataset if it match the following format and edit the path in the `identity_test.py` and `configs/train_expr_*.yml` files.
+[AffectNet](http://mohammadmahoor.com/affectnet/), [RAF-DB](http://www.whdeng.cn/RAF/model1.html), and [LFW/SLLFW](http://www.whdeng.cn/SLLFW/). Check your dataset if it match the following format and edit the path in the `identity_test.py` and `configs/train_expr_*.yml` files.
 
 ```bash
 
@@ -45,10 +43,7 @@ LFW/SLLFW
 
 ## Pretrained Model and Checkpoints
 
-Please download the pretrained LatentFace model from [here](https://www.dropbox.com/scl/fi/5duiidexvrw00fx2ex2gp/latentface.7z?rlkey=n9ruy237at44z8ejhlnv398hx&dl=0) and put it in the `model/latentface` folder.
-
-Please download the checkpoints model from [here](https://www.dropbox.com/scl/fo/zpn3h1yv20fg0yhgku7hp/h?rlkey=b676nkjr1ghl1jyb1gp1l7jb0&dl=0) and put it in the `checkpoints` folder.
-
+Please download the pretrained model and the downstream checkpoints from [here](https://www.dropbox.com/scl/fo/apaxoniviytfycfqn9o1n/ACnKre_5VEVvFKE4rlFi3Us?rlkey=58aa1lyabrh0ksjrqsg75fe5f&st=kmzccn31&dl=0).
 
 ## Test Performance
 
@@ -138,22 +133,3 @@ python expr_test.py --train --config configs/train_expr_affwild.yml --max_epochs
 ```
 
 </details>
-
-## Pretraining
-
-Please refer to [this branch](https://github.com/ryanhe312/LatentFace/tree/pretrain) for pretraining codes.
-
-## Citation
-
-If you find this work useful, please cite our paper with the following bibtex:
-
-```bibtex
-@misc{he2023unsupervised,
-      title={Unsupervised Disentangling of Facial Representations with 3D-aware Latent Diffusion Models}, 
-      author={Ruian He and Zhen Xing and Weimin Tan and Bo Yan},
-      year={2023},
-      eprint={2309.08273},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV}
-}
-```

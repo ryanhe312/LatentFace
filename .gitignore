@@ -1,5 +1,7 @@
 lightning_logs/
+results/
 *.pth
+*.bk
 *.ckpt
 
 # Byte-compiled / optimized / DLL files

@@ -19,10 +19,10 @@ class ExprClassifier(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters(params)
 
-        from .latentface.model_diffusion import Unsup3D_diffusion
-        config = yaml.safe_load(open('model/latentface/train_celeba.yml'))
+        from unsup3d import Unsup3D_diffusion
+        config = yaml.safe_load(open('configs/train_celeba.yml'))
         self.model = Unsup3D_diffusion(config)
-        state_dict = torch.load('model/latentface/diffusion_64_depth.pth')
+        state_dict = torch.load('diffusion_64.pth')
         self.model.load_model_state(state_dict)
         self.model.to_device('cuda')
         self.model.set_eval()
@@ -46,24 +46,19 @@ class ExprClassifier(pl.LightningModule):
 
     def forward(self, x):
         # use forward for inference/predictions
-        if hasattr(self, 'model') and hasattr(self.model, 'scheduler'):
-            albedo = self.model.netA(x*2-1)[0]
-            shape = self.model.netD(x*2-1)[0]
-
-            neutral_a = torch.randn(albedo.shape).to(albedo.device)
-            for t in self.model.scheduler.timesteps:
-                concat_input = torch.cat([neutral_a, albedo], dim=1)
-                model_output = self.model.netEA(concat_input, t).sample
-                neutral_a = self.model.scheduler.step(model_output, t, neutral_a, eta=0).prev_sample
-                                          
-            neutral_d = torch.randn(shape.shape).to(shape.device)
-            for t in self.model.scheduler.timesteps:
-                concat_input = torch.cat([neutral_d, shape], dim=1)
-                model_output = self.model.netED(concat_input, t).sample
-                neutral_d = self.model.scheduler.step(model_output, t, neutral_d, eta=0).prev_sample
-            embedding = torch.cat([(albedo - neutral_a).squeeze(),albedo.squeeze(),(shape - neutral_d).squeeze(),shape.squeeze()],-1)
-        else:
-            embedding = self.backbone(x)
+        albedo = self.model.netA(x*2-1)[0]
+        shape = self.model.netD(x*2-1)[0]
+        neutral_a = torch.randn(albedo.shape).to(albedo.device)
+        for t in self.model.scheduler.timesteps:
+            concat_input = torch.cat([neutral_a, albedo], dim=1)
+            model_output = self.model.netEA(concat_input, t).sample
+            neutral_a = self.model.scheduler.step(model_output, t, neutral_a, eta=0).prev_sample              
+        neutral_d = torch.randn(shape.shape).to(shape.device)
+        for t in self.model.scheduler.timesteps:
+            concat_input = torch.cat([neutral_d, shape], dim=1)
+            model_output = self.model.netED(concat_input, t).sample
+            neutral_d = self.model.scheduler.step(model_output, t, neutral_d, eta=0).prev_sample
+        embedding = torch.cat([(albedo - neutral_a).squeeze(),albedo.squeeze(),(shape - neutral_d).squeeze(),shape.squeeze()],-1)
         # print(embedding.shape)
         y_hat = self.head(embedding)
         return y_hat

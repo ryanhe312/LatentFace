@@ -1,4 +1,5 @@
 from PIL import Image
+import random
 import numpy as np
 import yaml
 from torchvision.transforms import functional as F
@@ -22,27 +23,6 @@ STD = [0.229, 0.224, 0.225]
 
 img_size = 64
 
-def extractDeepFeature(img, model, is_gray):
-    if is_gray:
-        transform = transforms.Compose([
-            transforms.Grayscale(),
-            transforms.Resize(size=(img_size, img_size)),
-            transforms.ToTensor(),  # range [0, 255] -> [0.0,1.0]
-        ])
-    else:
-        transform = transforms.Compose([
-            transforms.Resize(size=(img_size, img_size)),
-            transforms.ToTensor(),  # range [0, 255] -> [0.0,1.0]
-        ])
-
-    img, img_ = transform(img), transform(F.hflip(img))
-
-    # Model
-    img, img_ = img.unsqueeze(0).to('cuda'), img_.unsqueeze(0).to('cuda')
-    ft = torch.cat((model(img), model(img_)), 1)[0].to('cpu')
-    return ft
-
-
 def KFold(n=6000, n_folds=10):
     folds = []
     base = list(range(n))
@@ -53,27 +33,48 @@ def KFold(n=6000, n_folds=10):
     return folds
 
 
-def eval_acc(threshold, diff):
-    y_true = []
-    y_predict = []
-    for d in diff:
-        same = 1 if float(d[2]) > threshold else 0
-        y_predict.append(same)
-        y_true.append(int(d[3]))
-    y_true = np.array(y_true)
-    y_predict = np.array(y_predict)
-    accuracy = 1.0 * np.count_nonzero(y_true == y_predict) / len(y_true)
-    return accuracy
+def eval_acc(model, predicts, test):
+    # eval mlp classifier
+    model.eval()
+    with torch.no_grad():
+        f1 = predicts[0][test]
+        f2 = predicts[1][test]
+        labels = predicts[2][test]
+        inputs = torch.cat([(f1-f2).abs(),(f1+f2).abs(),(f1*f2).abs()],dim=1)
+        print(inputs.shape, labels.shape)
+        out = model(torch.tensor(inputs).float().to('cuda'))
+        out = out.argmax(1).cpu()
+        print(out, labels)
+        acc = (out == labels).float().mean()
+    return acc
 
+import torch.nn as nn
+import numpy as np
+def find_best_model(predicts,train):
+    # train a mlp classifier
+    print(predicts[0].shape)
+    input_dim = predicts[0].shape[1]*3
 
-def find_best_threshold(thresholds, predicts):
-    best_threshold = best_acc = 0
-    for threshold in thresholds:
-        accuracy = eval_acc(threshold, predicts)
-        if accuracy >= best_acc:
-            best_acc = accuracy
-            best_threshold = threshold
-    return best_threshold
+    mlp = nn.Sequential(nn.Linear(input_dim, 2))
+    mlp.to('cuda')
+    mlp.train()
+    optimizer = torch.optim.Adam(mlp.parameters(), lr=0.0001)
+    loss_fn = nn.CrossEntropyLoss()
+
+    from tqdm.auto import tqdm
+    for epoch in tqdm(range(300)):
+        train = np.random.permutation(train)
+        for i in range(0, len(predicts), 128):
+            f1 = predicts[0][train][i:i + 128]
+            f2 = predicts[1][train][i:i + 128]
+            labels = predicts[2][train][i:i + 128]
+            inputs = torch.cat([(f1-f2).abs(),(f1+f2).abs(),(f1*f2).abs()],dim=1)
+            optimizer.zero_grad()
+            out = mlp(torch.tensor(inputs).float().to('cuda'))
+            loss = loss_fn(out, torch.tensor(labels).to('cuda'))
+            loss.backward()
+            optimizer.step()
+    return mlp
 
 
 def get_lfw_line(pairs_lines, i):
@@ -113,8 +114,8 @@ def get_sllfw_line(pairs_lines, i):
 
 from tqdm.auto import tqdm
 
-def eval(model, is_gray=False):
-    predicts = []
+def eval(model):
+    predicts = [[],[],[]]
 
     # LFW
     root = os.path.join(args.path,'lfw_crop')
@@ -130,33 +131,57 @@ def eval(model, is_gray=False):
     num_test = 6000
     n_folds = 10
 
+    transform = transforms.Compose([
+        transforms.Resize(size=(img_size, img_size)),
+        transforms.ToTensor(),  # range [0, 255] -> [0.0,1.0]
+    ])
+
+    print('Extracting features from {}...'.format(args.dataset))
     with torch.no_grad():
-        for i in tqdm(range(num_test)):
-            if args.dataset == "SLLFW":
-                sameflag, name1, name2 = get_sllfw_line(pairs_lines, i)
-            else:
-                sameflag, name1, name2 = get_lfw_line(pairs_lines, i)
+        batch_size = 128
+        for i in tqdm(range(0, num_test, batch_size)):
+            img1 = []
+            img2 = []
+            flag = []
 
-            img1 =  Image.open(os.path.join(root,name1))
-            img2 =  Image.open(os.path.join(root,name2))
+            for j in range(i, min(i + batch_size, num_test)):
+                if args.dataset == "SLLFW":
+                    sameflag, name1, name2 = get_sllfw_line(pairs_lines, j)
+                else:
+                    sameflag, name1, name2 = get_lfw_line(pairs_lines, j)
+                img1.append(transform(Image.open(os.path.join(root,name1))).unsqueeze(0))
+                img2.append(transform(Image.open(os.path.join(root,name2))).unsqueeze(0))
+                flag.append(sameflag)
 
-            f1 = extractDeepFeature(img1, model, is_gray)
-            f2 = extractDeepFeature(img2, model, is_gray)
+            img1 = torch.cat(img1).to('cuda')
+            img2 = torch.cat(img2).to('cuda')
 
-            distance = f1.dot(f2) / (f1.norm() * f2.norm() + 1e-5)
-            predicts.append('{}\t{}\t{}\t{}\n'.format(name1, name2, distance, sameflag))
+            f1 = model(img1).detach().to('cpu')
+            f1_flip = model(torch.flip(img1, [3])).detach().to('cpu')
+            f1 = torch.cat([f1, f1_flip], dim=1)
+            f2 = model(img2).detach().to('cpu')
+            f2_flip = model(torch.flip(img2, [3])).detach().to('cpu')
+            f2 = torch.cat([f2, f2_flip], dim=1)
+            # print(f1.shape, f2.shape, len(flag))
+            predicts[0].extend(f1)
+            predicts[1].extend(f2)
+            predicts[2].extend(flag)
+            
+    predicts[0] = torch.stack(predicts[0], dim=0)
+    predicts[1] = torch.stack(predicts[1], dim=0)
+    predicts[2] = torch.tensor(predicts[2])
+    # print(predicts[0].shape, predicts[1].shape, predicts[2].shape)
+    # print(predicts)
 
     accuracy = []
-    thd = []
     folds = KFold(n=num_test, n_folds=n_folds)
-    thresholds = np.arange(-1.0, 1.0, 0.005)
-    predicts = np.array(list(map(lambda line: line.strip('\n').split(), predicts)))
-
     for train, test in tqdm(folds):
-        best_thresh = find_best_threshold(thresholds, predicts[train])
-        accuracy.append(eval_acc(best_thresh, predicts[test]))
-        thd.append(best_thresh)
-    print('LFWACC={:.4f} std={:.4f} thd={:.4f} max={:.4f}'.format(np.mean(accuracy), np.std(accuracy), np.mean(thd), np.max(accuracy)))
+        print('Evaluate on {}, fold {}'.format(args.dataset, len(accuracy) + 1))
+        best_model = find_best_model(predicts, train)
+        acc = eval_acc(best_model, predicts, test)
+        print('ACC={:.4f}'.format(acc))
+        accuracy.append(acc)
+    print('Total ACC={:.4f} std={:.4f} max={:.4f}'.format(np.mean(accuracy), np.std(accuracy), np.max(accuracy)))
 
     print(accuracy)
 
@@ -168,10 +193,10 @@ if __name__ == '__main__':
     np.random.seed(1234)
     torch.manual_seed(1234)
 
-    from model.latentface.model_diffusion import Unsup3D_diffusion
-    config = yaml.safe_load(open('model/latentface/train_celeba.yml'))
+    from unsup3d import Unsup3D_diffusion
+    config = yaml.safe_load(open('configs/train_celeba.yml'))
     model = Unsup3D_diffusion(config)
-    state_dict = torch.load('model/latentface/diffusion_64_depth.pth')
+    state_dict = torch.load('diffusion_64.pth')
     model.load_model_state(state_dict)
     model.to_device('cuda')
     model.set_eval()
